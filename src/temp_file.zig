@@ -12,13 +12,23 @@ pub const TempFile = struct {
     }
 
     pub fn savePermanent(self: TempFile, sub_path: []const u8, options: fs.Dir.CopyFileOptions) !void {
+        if (sub_path.len <= 0) {
+            return error.EmptyName;
+        }
+
         var source_buffer: [fs.max_path_bytes]u8 = undefined;
         const source_absolute_path = try fs.cwd().realpath(self.tmp_path.slice(), &source_buffer);
 
-        var dest_buffer: [fs.max_path_bytes]u8 = undefined;
-        const dest_absolute_path = try fs.cwd().realpath(sub_path, &dest_buffer);
+        var buffer: [fs.max_path_bytes]u8 = undefined;
+        const absolute_curr_path = try fs.cwd().realpath(".", &buffer);
 
-        try fs.copyFileAbsolute(source_absolute_path, dest_absolute_path, options);
+        var dest_buffer: [fs.max_path_bytes]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&dest_buffer);
+        const allocator = fba.allocator();
+        const dest = try fs.path.join(allocator, &[_][]const u8{ absolute_curr_path, sub_path });
+        std.log.warn("{s}", .{dest});
+
+        try fs.copyFileAbsolute(source_absolute_path, dest, options);
     }
 };
 
@@ -75,4 +85,12 @@ test "create a temp file" {
     fs.cwd().access(random, .{}) catch {
         @panic("File should exist");
     };
+
+    var crashed = false;
+    file.savePermanent("", .{}) catch {
+        crashed = true;
+    };
+    if (!crashed) {
+        @panic("This should have failed!");
+    }
 }
