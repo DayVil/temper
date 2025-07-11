@@ -2,7 +2,8 @@ const std = @import("std");
 const fs = std.fs;
 
 var mutex = std.Thread.Mutex{};
-var counter: u64 = 0;
+const CounterT = u16;
+var counter: CounterT = 0;
 
 pub const TempFile = struct {
     fd: fs.File,
@@ -38,7 +39,7 @@ pub const TempFile = struct {
 fn random_numbers(allocator: std.mem.Allocator, len: usize) ![]const u8 {
     mutex.lock();
     defer {
-        counter += 1;
+        counter = (counter + 1) % std.math.maxInt(CounterT);
         mutex.unlock();
     }
 
