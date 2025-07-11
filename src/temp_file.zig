@@ -1,6 +1,9 @@
 const std = @import("std");
 const fs = std.fs;
 
+var mutex = std.Thread.Mutex{};
+var counter: u64 = 0;
+
 pub const TempFile = struct {
     fd: fs.File,
     tmp_name: std.BoundedArray(u8, fs.max_path_bytes),
@@ -33,11 +36,19 @@ pub const TempFile = struct {
 };
 
 fn random_numbers(allocator: std.mem.Allocator, len: usize) ![]const u8 {
+    mutex.lock();
+    defer {
+        counter += 1;
+        mutex.unlock();
+    }
+
     const time_stamp = std.time.milliTimestamp();
     const time_stamp_name = try std.fmt.allocPrint(allocator, "{d}", .{time_stamp});
     const time_stamp_ending = time_stamp_name[time_stamp_name.len - len ..];
 
-    return time_stamp_ending;
+    const prefix = std.fmt.allocPrint(allocator, "{s}-{d}", .{ time_stamp_ending, counter });
+
+    return prefix;
 }
 
 pub fn createTempFile(config: struct {
