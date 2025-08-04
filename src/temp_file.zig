@@ -1,20 +1,46 @@
 const std = @import("std");
 const fs = std.fs;
 
+/// Mutex for thread-safe access to the global counter
 var mutex = std.Thread.Mutex{};
+/// Type for the counter used in filename generation
 const CounterT = u16;
+/// Global counter for ensuring unique temporary file names across threads
 var counter: CounterT = 0;
 
+/// A temporary file that is automatically cleaned up when closed.
+/// Provides functionality to create, manage, and optionally save temporary files permanently.
 pub const TempFile = struct {
+    /// The file descriptor for the temporary file
     fd: fs.File,
+    /// The base name of the temporary file (without path)
     tmp_name: std.BoundedArray(u8, fs.max_path_bytes),
+    /// The full path to the temporary file
     tmp_path: std.BoundedArray(u8, fs.max_path_bytes),
 
+    /// Closes the temporary file and deletes it from the filesystem.
+    /// This should be called when the temporary file is no longer needed
+    /// to ensure proper cleanup and prevent file system clutter.
+    /// 
+    /// Returns:
+    ///   - `void` on success
+    ///   - Error if the file cannot be deleted
     pub fn close(self: *TempFile) !void {
         self.fd.close();
         try fs.cwd().deleteFile(self.tmp_path.slice());
     }
 
+    /// Saves the temporary file to a permanent location by copying it.
+    /// The original temporary file remains unchanged and should still be closed separately.
+    /// 
+    /// Parameters:
+    ///   - `sub_path`: The destination path relative to the current working directory
+    ///   - `options`: Copy options such as whether to override existing files
+    /// 
+    /// Returns:
+    ///   - `void` on success
+    ///   - `error.EmptyName` if sub_path is empty
+    ///   - File system errors if the copy operation fails
     pub fn savePermanent(self: TempFile, sub_path: []const u8, options: fs.Dir.CopyFileOptions) !void {
         if (sub_path.len <= 0) {
             return error.EmptyName;
@@ -36,6 +62,17 @@ pub const TempFile = struct {
     }
 };
 
+/// Generates a random string for use in temporary file names.
+/// Uses a combination of current timestamp and an incrementing counter to ensure uniqueness.
+/// This function is thread-safe through the use of a mutex.
+/// 
+/// Parameters:
+///   - `allocator`: Memory allocator for the generated string
+///   - `len`: Length of the timestamp suffix to use
+/// 
+/// Returns:
+///   - A formatted string containing timestamp suffix and counter
+///   - Allocation errors if memory allocation fails
 fn random_numbers(allocator: std.mem.Allocator, len: usize) ![]const u8 {
     mutex.lock();
     defer {
@@ -52,6 +89,26 @@ fn random_numbers(allocator: std.mem.Allocator, len: usize) ![]const u8 {
     return prefix;
 }
 
+/// Creates a new temporary file in the current working directory.
+/// The file is created with a unique name and can be configured with custom prefix and flags.
+/// The returned TempFile should be closed when no longer needed to clean up the file.
+/// 
+/// Configuration options:
+///   - `tmp_name`: Suffix to append to the generated temporary filename (default: "")
+///   - `prefix`: Custom prefix for the filename. If null, a random prefix is generated (default: null)
+///   - `flags`: File creation flags such as read/write permissions (default: {})
+/// 
+/// Returns:
+///   - `TempFile` structure containing the file descriptor and path information
+///   - `error.Overflow` if the generated path exceeds the maximum path length
+///   - File system errors if the file cannot be created
+/// 
+/// Example:
+/// ```zig
+/// var temp_file = try createTempFile(.{ .tmp_name = ".txt", .prefix = "myapp" });
+/// defer temp_file.close() catch {};
+/// // Use temp_file.fd for file operations
+/// ```
 pub fn createTempFile(config: struct {
     tmp_name: []const u8 = "",
     prefix: ?[]const u8 = null,
@@ -102,6 +159,7 @@ test "create a temp file" {
     file.savePermanent("", .{}) catch {
         crashed = true;
     };
+
     if (!crashed) {
         @panic("This should have failed!");
     }
