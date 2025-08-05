@@ -180,11 +180,3 @@ The library provides comprehensive error handling:
 ## Thread Safety
 
 Temper is thread-safe. Multiple threads can create temporary files concurrently without filename collisions, thanks to the mutex-protected global counter.
-
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
